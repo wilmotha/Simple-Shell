@@ -1,13 +1,14 @@
 import os
 import sys
+import fcntl
 
 #-----------------------Redirect-------------------------#
 def redirect(file_name, redirect_location):
     if redirect_location == 0:
-        file = os.open(file_name, O_RDONLY)
+        file = os.open(file_name, os.O_RDONLY)
     else:
         file = os.open(file_name, os.O_WRONLY | os.O_CREAT | os.O_TRUNC) #0644
-    os.fcntl(file, os.F_SETFD, os.FD_CLOSEXEC)
+    fcntl.fcntl(file, fcntl.F_SETFD, fcntl.FD_CLOEXEC)
     if file == -1:
         os.perror("dup2")
         exit(1)
@@ -15,22 +16,22 @@ def redirect(file_name, redirect_location):
     sys.stdout.flush()
     sys.stdin.flush()
 
-    result = dup2(file, redirect_location)
+    result = os.dup2(file, redirect_location)
     if file == -1: 
         os.perror("dup2")
         exit(2)
 
 def is_redirected(exe):
     for i in range(len(exe)):
-        if exe[i] == ">" and i+2 < len(exe):
+        if exe[i] == ">" and i+1 < len(exe):
             redirect(exe[i+1], 1)
             exe.pop(i)
-            exe.pop(i+1)
+            exe.pop(i)
             break
         elif exe[i] == "<" and i+1 < len(exe):
             redirect(exe[i+1], 0)
             exe.pop(i)
-            exe.pop(i+1)
+            exe.pop(i)
             break
     return exe
 
@@ -70,7 +71,7 @@ def command_cd(exe):
 def command_status():
     print("NOTHING TO SEE HERE")
 
-def command_other(exe):
+def command_other(exe_st):
     stdin_save = os.dup(0)
     stdout_save = os.dup(1)
 
@@ -80,8 +81,15 @@ def command_other(exe):
     if spawnpid == -1:
         print("Error")
     elif spawnpid == 0:
-        sys.stdout.flush()
-        os.execvp(exe[0], exe)
+        exe = is_redirected(exe_st)
+        if exe[0][0] == '#':
+            exe[0] = ""
+        
+        if exe[0] != "":
+            sys.stdout.flush()
+            os.execvp(exe[0], exe)
+            os.perror(exe[0])           
+
         exit()
     else:
         reset_redirection(stdout_save, stdin_save)
